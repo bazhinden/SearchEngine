@@ -65,15 +65,14 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
         try {
             if (Thread.currentThread().isInterrupted()) {
                 log.info("Индексация прервана для URL: {}", url);
+                site.setStatus(Status.FAILED);
+                site.setStatusTime(Timestamp.valueOf(LocalDateTime.now()));
+                siteRepository.save(site);
                 return null;
             }
 
-            // Проверка и добавление URL делается синхронно
-            synchronized (visitedUrls) {
-                if (visitedUrls.contains(url)) {
-                    return null;
-                }
-                visitedUrls.add(url);
+            if (!visitedUrls.add(url)) {
+                return null;
             }
 
             if (!isVisited(url)) {
@@ -83,7 +82,7 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
                         .timeout(10000)
                         .execute();
 
-                if (response.statusCode() == 200) {
+                if (isValidStatusCode(response.statusCode())) {
                     Document doc = response.parse();
                     savePage(url, response.statusCode(), doc.outerHtml());
                     Elements links = doc.select("a[href]");
@@ -98,8 +97,6 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
                     }
 
                     invokeAll(tasks);
-                } else {
-                    savePage(url, response.statusCode(), "");
                 }
             }
         } catch (IOException e) {
@@ -108,14 +105,10 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
         } finally {
             addDelay();
 
-            if (site.getStatus() != Status.FAILED) {
-                site.setStatus(Status.INDEXED);
-                site.setStatusTime(Timestamp.valueOf(LocalDateTime.now()));
-                siteRepository.save(site);
-            }
         }
         return null;
     }
+
 
     private boolean isVisited(String url) {
         return pageRepository.existsByPathAndSite(url.replace(site.getUrl(), ""), site);
@@ -126,8 +119,7 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
     }
 
     private void savePage(String url, int statusCode, String content) {
-        if (statusCode >= 400 && statusCode < 600) {
-            log.warn("Не индексируем страницу с ошибочным HTTP-кодом {}: {}", statusCode, url);
+        if (!isValidStatusCode(statusCode)) {
             return;
         }
 
@@ -149,12 +141,11 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
         }
     }
 
-   private void updateLemmasAndIndices(Map<String, Integer> lemmas, PageEntity page) {
+    private void updateLemmasAndIndices(Map<String, Integer> lemmas, PageEntity page) {
         for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
             String lemmaText = entry.getKey();
             int frequency = entry.getValue();
 
-            // Используем кэш лемм для снижения количества запросов к базе данных
             LemmaEntity lemma = lemmaCache.computeIfAbsent(lemmaText, key ->
                     lemmaRepository.findByLemmaAndSite(key, page.getSite()).orElse(new LemmaEntity())
             );
@@ -170,6 +161,7 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
             indexRepository.save(indexEntity);
         }
     }
+
     private void saveError(SiteEntity site, String error) {
         site.setStatus(Status.FAILED);
         site.setLastError(error);
@@ -179,9 +171,17 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
 
     private void addDelay() {
         try {
-            Thread.sleep((long) (Math.random() * 1000) + 500);
+            Thread.sleep(100);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private boolean isValidStatusCode(int statusCode) {
+        if (statusCode >= 400 && statusCode < 600) {
+            log.warn("Не индексируем страницу с ошибочным HTTP-кодом {}: {}", statusCode, url);
+            return false;
+        }
+        return true;
     }
 }
