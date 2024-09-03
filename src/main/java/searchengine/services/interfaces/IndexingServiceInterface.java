@@ -2,7 +2,7 @@ package searchengine.services.interfaces;
 
 import searchengine.dto.indexing.IndexingResponse;
 
-public interface IndexingService {
+public interface IndexingServiceInterface {
     IndexingResponse startIndexing();
     IndexingResponse stopIndexing();
     boolean isIndexing();

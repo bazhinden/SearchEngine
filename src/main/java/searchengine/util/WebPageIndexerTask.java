@@ -1,4 +1,4 @@
-package searchengine.services;
+package searchengine.util;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
@@ -6,9 +6,9 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+
 import org.springframework.dao.DataIntegrityViolationException;
 import searchengine.config.UserConfig;
-import searchengine.lemmas.LemmaFinder;
 import searchengine.model.IndexEntity;
 import searchengine.model.LemmaEntity;
 import searchengine.model.PageEntity;
@@ -23,11 +23,10 @@ import java.io.IOException;
 import java.io.Serial;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.RecursiveTask;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.RecursiveTask;
 
 @Slf4j
 public class WebPageIndexerTask extends RecursiveTask<Void> {
@@ -44,12 +43,14 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
 
-    private final Set<String> visitedUrls = ConcurrentHashMap.newKeySet();
-    private final Map<String, LemmaEntity> lemmaCache = new ConcurrentHashMap<>();
+    private final Set<String> visitedUrls;
+    private final ConcurrentMap<String, LemmaEntity> lemmaCache;
+    private final ConcurrentMap<String, Boolean> pageCache;
 
     public WebPageIndexerTask(String url, SiteEntity site, PageRepository pageRepository, SiteRepository siteRepository,
                               UserConfig userConfig, LemmaFinder lemmaFinder, LemmaRepository lemmaRepository,
-                              IndexRepository indexRepository) {
+                              IndexRepository indexRepository, ConcurrentMap<String, Boolean> pageCache,
+                              ConcurrentMap<String, LemmaEntity> lemmaCache) {
         this.url = url;
         this.site = site;
         this.pageRepository = pageRepository;
@@ -58,6 +59,9 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
         this.lemmaFinder = lemmaFinder;
         this.lemmaRepository = lemmaRepository;
         this.indexRepository = indexRepository;
+        this.visitedUrls = ConcurrentHashMap.newKeySet();
+        this.pageCache = pageCache;
+        this.lemmaCache = lemmaCache;
     }
 
     @Override
@@ -71,51 +75,39 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
                 return null;
             }
 
-            if (!visitedUrls.add(url)) {
+            if (!visitedUrls.add(url) || pageCache.containsKey(url)) {
                 return null;
             }
 
-            if (!isVisited(url)) {
-                Connection.Response response = Jsoup.connect(url)
-                        .userAgent(userConfig.getAgent())
-                        .referrer(userConfig.getReferer())
-                        .timeout(10000)
-                        .execute();
+            Connection.Response response = Jsoup.connect(url)
+                    .userAgent(userConfig.getAgent())
+                    .referrer(userConfig.getReferer())
+                    .timeout(10000)
+                    .execute();
 
-                if (isValidStatusCode(response.statusCode())) {
-                    Document doc = response.parse();
-                    savePage(url, response.statusCode(), doc.outerHtml());
-                    Elements links = doc.select("a[href]");
-                    Set<WebPageIndexerTask> tasks = new HashSet<>();
+            if (isValidStatusCode(response.statusCode())) {
+                Document doc = response.parse();
+                savePage(url, response.statusCode(), doc.outerHtml());
+                Elements links = doc.select("a[href]");
+                Set<WebPageIndexerTask> tasks = new HashSet<>();
 
-                    for (Element link : links) {
-                        String childUrl = link.absUrl("href");
-                        if (isValidUrl(childUrl) && !visitedUrls.contains(childUrl)) {
-                            tasks.add(new WebPageIndexerTask(childUrl, site, pageRepository, siteRepository, userConfig,
-                                    lemmaFinder, lemmaRepository, indexRepository));
-                        }
+                for (Element link : links) {
+                    String childUrl = link.absUrl("href");
+                    if (isValidUrl(childUrl) && !visitedUrls.contains(childUrl)) {
+                        tasks.add(new WebPageIndexerTask(childUrl, site, pageRepository, siteRepository, userConfig,
+                                lemmaFinder, lemmaRepository, indexRepository, pageCache, lemmaCache));
                     }
-
-                    invokeAll(tasks);
                 }
+
+                invokeAll(tasks);
             }
         } catch (IOException e) {
             log.error("Error processing URL: {}", url, e);
             saveError(site, e.getMessage());
         } finally {
             addDelay();
-
         }
         return null;
-    }
-
-
-    private boolean isVisited(String url) {
-        return pageRepository.existsByPathAndSite(url.replace(site.getUrl(), ""), site);
-    }
-
-    private boolean isValidUrl(String url) {
-        return url.startsWith(site.getUrl()) && !url.contains("#") && !url.matches(".*\\.(pdf|jpg|png|zip)$");
     }
 
     private void savePage(String url, int statusCode, String content) {
@@ -129,10 +121,10 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
             page.setCode(statusCode);
             page.setContent(content);
             page.setSite(site);
-
             page.setStatus(Status.INDEXED);
 
             pageRepository.save(page);
+            pageCache.put(url, true);
 
             Map<String, Integer> lemmas = lemmaFinder.collectLemmas(lemmaFinder.cleanHtml(content));
             updateLemmasAndIndices(lemmas, page);
@@ -142,6 +134,8 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
     }
 
     private void updateLemmasAndIndices(Map<String, Integer> lemmas, PageEntity page) {
+        Map<LemmaEntity, Integer> lemmaFrequencyMap = new HashMap<>();
+
         for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
             String lemmaText = entry.getKey();
             int frequency = entry.getValue();
@@ -150,16 +144,25 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
                     lemmaRepository.findByLemmaAndSite(key, page.getSite()).orElse(new LemmaEntity())
             );
             lemma.setLemma(lemmaText);
-            lemma.setFrequency(lemma.getFrequency() + 1);
+            lemma.setFrequency(lemma.getFrequency() + frequency);
             lemma.setSite(page.getSite());
-            lemmaRepository.save(lemma);
+            lemmaFrequencyMap.put(lemma, lemmaFrequencyMap.getOrDefault(lemma, 0) + frequency);
+        }
+
+        lemmaRepository.saveAll(lemmaCache.values());
+
+        List<IndexEntity> indexEntities = new ArrayList<>();
+        for (Map.Entry<LemmaEntity, Integer> entry : lemmaFrequencyMap.entrySet()) {
+            LemmaEntity lemma = entry.getKey();
+            int frequency = entry.getValue();
 
             IndexEntity indexEntity = new IndexEntity();
             indexEntity.setPage(page);
             indexEntity.setLemma(lemma);
             indexEntity.setRanking((float) frequency);
-            indexRepository.save(indexEntity);
+            indexEntities.add(indexEntity);
         }
+        indexRepository.saveAll(indexEntities);
     }
 
     private void saveError(SiteEntity site, String error) {
@@ -184,4 +187,10 @@ public class WebPageIndexerTask extends RecursiveTask<Void> {
         }
         return true;
     }
+
+    private boolean isValidUrl(String url) {
+        return url.startsWith(site.getUrl()) && !url.contains("#") && !url.matches(".*\\.(pdf|jpg|png|zip)$");
+    }
 }
+
+

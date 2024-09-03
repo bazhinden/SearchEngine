@@ -25,6 +25,7 @@ import java.util.List;
 @Entity
 @Table(name = "site")
 public class SiteEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;

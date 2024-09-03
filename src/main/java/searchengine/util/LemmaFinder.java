@@ -1,4 +1,4 @@
-package searchengine.lemmas;
+package searchengine.util;
 
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
@@ -7,9 +7,11 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class LemmaFinder {
@@ -51,6 +53,32 @@ public class LemmaFinder {
 
     public String cleanHtml(String html) {
         return Jsoup.parse(html).text();
+    }
+
+    public Set<String> getLemmaSet(String text) {
+        String[] words = arrayContainsRussianWords(text);
+        Set<String> lemmaSet = new HashSet<>();
+
+        for (String word : words) {
+            if (word.isBlank() || !isCorrectWordForm(word)) {
+                continue;
+            }
+
+            List<String> wordBaseForms = luceneMorphology.getMorphInfo(word);
+            if (anyWordBaseBelongToParticle(wordBaseForms)) {
+                continue;
+            }
+
+            List<String> normalForms = luceneMorphology.getNormalForms(word);
+            if (normalForms.isEmpty()) {
+                continue;
+            }
+
+            String normalWord = normalForms.get(0);
+            lemmaSet.add(normalWord);
+        }
+
+        return lemmaSet;
     }
 
     private boolean anyWordBaseBelongToParticle(List<String> wordBaseForms) {

@@ -9,7 +9,7 @@ import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.config.UserConfig;
 import searchengine.dto.indexing.IndexingResponse;
-import searchengine.lemmas.LemmaFinder;
+import searchengine.util.LemmaFinder;
 import searchengine.model.IndexEntity;
 import searchengine.model.LemmaEntity;
 import searchengine.model.PageEntity;
@@ -18,14 +18,14 @@ import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
-import searchengine.services.interfaces.PageIndexingService;
+import searchengine.services.interfaces.PageIndexingServiceInterface;
 
 import java.io.IOException;
 import java.util.Map;
 
 @Service
 @Slf4j
-public class PageIndexingServiceImp implements PageIndexingService {
+public class PageIndexingService implements PageIndexingServiceInterface {
 
     private final SitesList sitesList;
     private final SiteRepository siteRepository;
@@ -35,9 +35,9 @@ public class PageIndexingServiceImp implements PageIndexingService {
     private final LemmaFinder lemmaFinder;
     private final UserConfig userConfig;
 
-    public PageIndexingServiceImp(SitesList sitesList, SiteRepository siteRepository, PageRepository pageRepository,
-                                  LemmaRepository lemmaRepository, IndexRepository indexRepository,
-                                  LemmaFinder lemmaFinder, UserConfig userConfig) {
+    public PageIndexingService(SitesList sitesList, SiteRepository siteRepository, PageRepository pageRepository,
+                               LemmaRepository lemmaRepository, IndexRepository indexRepository,
+                               LemmaFinder lemmaFinder, UserConfig userConfig) {
         this.sitesList = sitesList;
         this.siteRepository = siteRepository;
         this.pageRepository = pageRepository;
@@ -46,10 +46,10 @@ public class PageIndexingServiceImp implements PageIndexingService {
         this.lemmaFinder = lemmaFinder;
         this.userConfig = userConfig;
     }
+
     @Override
     public IndexingResponse indexPage(String url) {
         try {
-            // Найти сайт по URL
             SiteEntity site = findSiteByUrl(url);
             if (site == null) {
                 return new IndexingResponse(false,

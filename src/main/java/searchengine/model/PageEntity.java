@@ -27,14 +27,13 @@ import java.util.List;
 @Table(name = "page", indexes = @Index(name = "idx_path", columnList = "path"),
         uniqueConstraints = @UniqueConstraint(columnNames = {"path", "site_id"}))
 public class PageEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
     @ManyToOne
-    @JoinColumn(name = "site_id", nullable = false)  // Site_ID: Это внешний ключ, который указывает на ID записи в таблице site.
-    // Он показывает, к какому сайту относится каждая страница.
-    //Пример: Строка с ID 1 в таблице page имеет Site_ID 1, что означает, что эта страница относится к сайту с ID 1 в таблице site.
+    @JoinColumn(name = "site_id", nullable = false)
     private SiteEntity site;
 
     @Column(nullable = false)

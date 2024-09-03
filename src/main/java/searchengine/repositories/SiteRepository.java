@@ -11,5 +11,6 @@ import java.util.Optional;
 @Repository
 public interface SiteRepository extends JpaRepository<SiteEntity, Integer> {
     List<SiteEntity> findByStatus(Status status);
+
     Optional<SiteEntity> findByUrl(String url);
 }

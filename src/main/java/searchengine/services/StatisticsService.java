@@ -15,16 +15,16 @@ import searchengine.repositories.LemmaRepository;
 
 import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
-import searchengine.services.interfaces.StatisticsService;
+import searchengine.services.interfaces.StatisticsServiceInterface;
 
 @Service
 @RequiredArgsConstructor
-public class StatisticsServiceImpl implements StatisticsService {
+public class StatisticsService implements StatisticsServiceInterface {
 
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
     private final LemmaRepository lemmaRepository;
-    private final IndexingServiceImpl indexingService;
+    private final IndexingService indexingService;
 
     @Override
     public StatisticsResponse getStatistics() {

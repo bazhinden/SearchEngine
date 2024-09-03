@@ -25,12 +25,10 @@ public class LemmaEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "site_id", nullable = false) // Site_ID: Это внешний ключ, который указывает на ID записи в таблице site.
-    // Он показывает, к какому сайту относится каждая лемма.
-    //Пример: Строка с ID 1 в таблице lemma имеет Site_ID 1, что означает, что эта лемма относится к сайту с ID 1 в таблице site.
+    @JoinColumn(name = "site_id", nullable = false)
     private SiteEntity site;
 
     @Column(columnDefinition = "VARCHAR(255)", nullable = false)
@@ -41,5 +39,4 @@ public class LemmaEntity {
 
     @OneToMany(mappedBy = "lemma", cascade = CascadeType.ALL)
     private List<IndexEntity> indices;
-
 }
