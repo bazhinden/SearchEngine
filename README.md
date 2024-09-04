@@ -71,26 +71,26 @@
     - **Получение статистики**
         - **Метод**: `GET`
         - **Эндпоинт**: `/api/statistics`
-    ![statistics](img\img_2.png)
+    ![statistics](img/img_2.png)
 
     - **Запуск индексации**
         - **Метод**: `GET`
         - **Эндпоинт**: `/api/startIndexing`
-    ![startIndexing](img\img_1.png)
+    ![startIndexing](img/img_1.png)
     - **Остановка индексации**
         - **Метод**: `GET`
         - **Эндпоинт**: `/api/stopIndexing`
-    ![stopIndexing](img\img_5.jpg)  
+    ![stopIndexing](img/img_4.png)  
     - **Индексация отдельной страницы**
         - **Метод**: `POST`
         - **Эндпоинт**: `/api/indexPage`
         - **Тело запроса**: URL страницы, которую нужно проиндексировать
-    ![indexPage](img\img_6.png)
+    ![indexPage](img/img_5.png)
     - **Поиск**
         - **Метод**: `GET`
         - **Эндпоинт**: `/api/search`
         - **Параметры запроса**: `query` - текст поискового запроса
-    ![search](img\img_4.png)
+    ![search](img/img_3.png)
 ## Конфигурация
 
 Конфигурация приложения находится в файле `application.yml`. Вы можете настроить следующие параметры:
